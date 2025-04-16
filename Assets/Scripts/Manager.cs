@@ -1438,7 +1438,9 @@ public class Manager : MonoBehaviour
     #region STATIC INSTANCE
 
     public static Manager Instance { get; private set; }
-    private StationManager stationManager;
+
+    public StationManager stationManager; // Drag-and-drop this in the Inspector
+
 
     private void Awake()
     {

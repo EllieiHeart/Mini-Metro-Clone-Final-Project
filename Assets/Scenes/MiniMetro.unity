@@ -2611,6 +2611,66 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1588212407}
   m_CullTransparentMesh: 1
+--- !u!1 &1989639537
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1989639539}
+  - component: {fileID: 1989639538}
+  m_Layer: 0
+  m_Name: StationManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1989639538
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1989639537}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8205ff737c44aed40a47c9efa7f31703, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  stationPrefab: {fileID: 187481007235670479, guid: e51843e15e3cb0345bf66a356b79b491, type: 3}
+  stationSprites:
+  - {fileID: -6231044458718751821, guid: f91a815f382c30b4a8d082406f5efbe3, type: 3}
+  - {fileID: 7782819319340085591, guid: ff1ee70ffa9a3cd429b5716725dcba56, type: 3}
+  - {fileID: -5049028735572192761, guid: daa325d987a296445bdb33cf50f88d78, type: 3}
+  - {fileID: -4329126854855654687, guid: af0d533c0733a5e4a891b305b7d68b9a, type: 3}
+  - {fileID: 8983665964854797129, guid: d24ab25f8d9c4bf488480495b6a84876, type: 3}
+  - {fileID: -552785069769076993, guid: cf3a35438b9c2f640b0597545515fec2, type: 3}
+  - {fileID: -1843197933104017171, guid: db7cab3710f22d34ca695926b3e73e79, type: 3}
+  - {fileID: 9164359298635338950, guid: 846168b6c6611f4419f6f3fb1f48d720, type: 3}
+  - {fileID: -5080786117994821360, guid: 1499f63ca4825874faa70c064ff1b727, type: 3}
+  stationSize: 1
+  stationClickRadius: 0.5
+  distanceBetweenGridIndices: 1
+  stationPlacementScreenPercent: 0.9
+  stationBoundaryRadius: 3
+--- !u!4 &1989639539
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1989639537}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.06, y: 2.97, z: 142.65918}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2019560455}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2019560453
 GameObject:
   m_ObjectHideFlags: 0
@@ -2640,15 +2700,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2778c0a9d89c88a419eb68590e252a39, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  stationManager: {fileID: 1989639538}
   stationPrefab: {fileID: 187481007235670479, guid: e51843e15e3cb0345bf66a356b79b491, type: 3}
   lineRendererPrefab: {fileID: 4903538606693582475, guid: 386fc07838854144b81280c7ceebaef9, type: 3}
   stationSprites:
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
+  - {fileID: -6231044458718751821, guid: f91a815f382c30b4a8d082406f5efbe3, type: 3}
+  - {fileID: 9164359298635338950, guid: 846168b6c6611f4419f6f3fb1f48d720, type: 3}
+  - {fileID: -1843197933104017171, guid: db7cab3710f22d34ca695926b3e73e79, type: 3}
+  - {fileID: 7782819319340085591, guid: ff1ee70ffa9a3cd429b5716725dcba56, type: 3}
+  - {fileID: -5049028735572192761, guid: daa325d987a296445bdb33cf50f88d78, type: 3}
+  - {fileID: -4329126854855654687, guid: af0d533c0733a5e4a891b305b7d68b9a, type: 3}
+  - {fileID: 8983665964854797129, guid: d24ab25f8d9c4bf488480495b6a84876, type: 3}
+  - {fileID: -5080786117994821360, guid: 1499f63ca4825874faa70c064ff1b727, type: 3}
+  - {fileID: -552785069769076993, guid: cf3a35438b9c2f640b0597545515fec2, type: 3}
   maxCameraTime: 60
   startingStationTotal: 3
   stationMaximumTotal: 10
@@ -2667,7 +2731,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1989639539}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2029309842
