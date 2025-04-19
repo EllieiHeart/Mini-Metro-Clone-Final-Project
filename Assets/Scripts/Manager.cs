@@ -495,6 +495,9 @@ public class Station
     private List<Point> totalPoints;
 
     private RectCollider collider;
+
+    private List<Passenger> waitingPassengers;
+
     #endregion
 
     #region PROPERTIES
@@ -553,6 +556,8 @@ public class Station
         pointConnections = new Point[8, 3];
         accessConnections = new Vector2[8, 3];
         totalPoints = new List<Point>();
+
+        waitingPassengers = new List<Passenger>();
 
         // Define the 24 points for station access.
         float _length = 0.2f;
@@ -632,6 +637,31 @@ public class Station
         accessor.transform.position = position;
         accessor.GetComponent<SpriteRenderer>().sprite = _icon;
     }
+
+    /// <summary>
+    /// Adds a passenger to this station's waiting list.
+    /// </summary>
+    public void AddPassenger(Passenger passenger)
+    {
+        waitingPassengers.Add(passenger);
+    }
+
+    /// <summary>
+    /// Returns all passengers currently at this station.
+    /// </summary>
+    public List<Passenger> GetPassengers()
+    {
+        return waitingPassengers;
+    }
+
+    /// <summary>
+    /// Removes a specific passenger from this station.
+    /// </summary>
+    public void RemovePassenger(Passenger passenger)
+    {
+        waitingPassengers.Remove(passenger);
+    }
+
     #endregion
 }
 
@@ -2711,6 +2741,9 @@ public class Manager : MonoBehaviour
         // Create the passenger data
         Passenger newPassenger = new Passenger(destinationShape);
 
+        // Add the passenger to the station's internal list
+        station.AddPassenger(newPassenger);
+
         // Instantiate the passenger GameObject at the station position
         GameObject passengerGO = Instantiate(passengerPrefab, station.StationTruePosition, Quaternion.identity);
 
@@ -2720,12 +2753,12 @@ public class Manager : MonoBehaviour
 
         // Optional: Parent it under the station for hierarchy clarity
         passengerGO.transform.SetParent(station.Accessor.transform);
-
-
     }
+
 
     private void SpawnPassengerAtRandomStation()
     {
+
         if (stations.Count == 0) return;
 
         // Randomly pick an active station
@@ -2733,6 +2766,7 @@ public class Manager : MonoBehaviour
         Station selectedStation = stations[randomIndex];
 
         SpawnPassengerAtStation(selectedStation);
+
     }
     #endregion
     #endregion
