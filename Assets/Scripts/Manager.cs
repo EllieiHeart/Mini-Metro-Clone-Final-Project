@@ -560,7 +560,7 @@ public class Station
         for (int _i = 0; _i < 8; ++_i)
         {
             accessConnections[_i, 0] = new Vector2(
-                    position.x + _length * Mathf.Cos((Mathf.PI / 4) * _i), 
+                    position.x + _length * Mathf.Cos((Mathf.PI / 4) * _i),
                     position.y + _length * Mathf.Sin((Mathf.PI / 4) * _i));
             accessConnections[_i, 1] = new Vector2(
                     accessConnections[_i, 0].x + _offsetLength * Mathf.Cos((Mathf.PI / 4) * _i + (Mathf.PI / 2)),
@@ -604,7 +604,7 @@ public class Station
     /// <param name="_accessAngleIndex">The angle's index to access through.</param>
     /// <param name="_accessSlot">The slot in a set angle's index to access.</param>
     /// <returns>The point to access.</returns>
-    public Point GetPointConnection (int _accessAngleIndex, int _accessSlot)
+    public Point GetPointConnection(int _accessAngleIndex, int _accessSlot)
     {
         return pointConnections[_accessAngleIndex, _accessSlot];
     }
@@ -615,7 +615,7 @@ public class Station
     /// <param name="_accessAngleIndex">The angle's index to access through.</param>
     /// <param name="_accessSlot">The slot in a set angle's index to access.</param>
     /// <param name="_point">The point to set here.</param>
-    public void SetPointConnection (int _accessAngleIndex, int _accessSlot, Point _point)
+    public void SetPointConnection(int _accessAngleIndex, int _accessSlot, Point _point)
     {
         pointConnections[_accessAngleIndex, _accessSlot] = _point;
     }
@@ -634,6 +634,18 @@ public class Station
     }
     #endregion
 }
+
+public class Passenger
+{
+    public STATION_SHAPE DestinationShape { get; private set; }
+
+    public Passenger(STATION_SHAPE destination)
+    {
+        DestinationShape = destination;
+    }
+}
+
+
 
 public class Point
 {
@@ -2334,6 +2346,10 @@ public class Manager : MonoBehaviour
     private Timer stationSpawnTimer;
     private StationGrid stationGrid;
 
+    [SerializeField] private GameObject passengerPrefab;
+    [SerializeField] private Sprite[] passengerIcons = new Sprite[(int)STATION_SHAPE.LENGTH];
+
+
     // Station Handling
     private List<Station> stations;
 
@@ -2425,6 +2441,16 @@ public class Manager : MonoBehaviour
                 CreateStation();
             }*/
         }
+
+        if (Input.GetKeyDown(KeyCode.P)) // Press P to spawn a passenger
+        {
+            if (stations.Count > 0)
+            {
+                int randomIndex = Random.Range(0, stations.Count);
+                SpawnPassengerAtStation(stations[randomIndex]);
+            }
+        }
+
 
         lineManager.PlayerInput();
     }
@@ -2655,6 +2681,31 @@ public class Manager : MonoBehaviour
                 }
             }
         }
+    }
+
+    public void SpawnPassengerAtStation(Station station)
+    {
+        // Avoid spawning a passenger with a destination same as the current station
+        STATION_SHAPE currentShape = station.Shape;
+        STATION_SHAPE destinationShape;
+
+        do
+        {
+            destinationShape = (STATION_SHAPE)Random.Range(0, (int)STATION_SHAPE.LENGTH);
+        } while (destinationShape == currentShape);
+
+        // Create the passenger data
+        Passenger newPassenger = new Passenger(destinationShape);
+
+        // Instantiate the passenger GameObject at the station position
+        GameObject passengerGO = Instantiate(passengerPrefab, station.StationTruePosition, Quaternion.identity);
+
+        // Assign passenger logic + visual sprite
+        PassengerBehavior behavior = passengerGO.GetComponent<PassengerBehavior>();
+        behavior.AssignPassenger(newPassenger, passengerIcons[(int)destinationShape]);
+
+        // Optional: Parent it under the station for hierarchy clarity
+        passengerGO.transform.SetParent(station.Accessor.transform);
     }
     #endregion
     #endregion

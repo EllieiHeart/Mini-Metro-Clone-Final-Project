@@ -2643,16 +2643,27 @@ MonoBehaviour:
   stationPrefab: {fileID: 187481007235670479, guid: e51843e15e3cb0345bf66a356b79b491, type: 3}
   lineRendererPrefab: {fileID: 4903538606693582475, guid: 386fc07838854144b81280c7ceebaef9, type: 3}
   stationSprites:
+  - {fileID: -6231044458718751821, guid: 5d31c62eec17ca24fa26200445f48b48, type: 3}
+  - {fileID: 7782819319340085591, guid: 97fa89af8732e7e409ee5cb5131b70c1, type: 3}
   - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
-  - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
+  - {fileID: -5049028735572192761, guid: bbe6459f11e68114ca1e4baa858324f0, type: 3}
+  - {fileID: -4329126854855654687, guid: 57f849299631e2f499db4f42fcfcdf46, type: 3}
+  - {fileID: 8983665964854797129, guid: a15925efc04407545894983fae49010b, type: 3}
+  - {fileID: -552785069769076993, guid: 8cbba10f38b615d458baf47cb796d572, type: 3}
+  - {fileID: -1843197933104017171, guid: f548dd5ee0234ee4fb4ced42a8fce879, type: 3}
+  - {fileID: 9164359298635338950, guid: c709e8d3ccfd21142aa8a65b74a4f5b1, type: 3}
   maxCameraTime: 60
   startingStationTotal: 3
   stationMaximumTotal: 10
   timeBetweenStationSpawns: 15
+  passengerPrefab: {fileID: 0}
+  passengerIcons:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   isGamePaused: 0
   availableTrains: 3
 --- !u!4 &2019560455
