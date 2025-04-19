@@ -485,6 +485,10 @@ public class AngledRectCollider
 public class Station
 {
     #region FIELDS
+
+    private List<Passenger> waitingPassengers = new List<Passenger>();
+
+
     private bool debugMode;
     private GameObject accessor;
     private STATION_SHAPE shape;
@@ -496,11 +500,17 @@ public class Station
 
     private RectCollider collider;
 
-    private List<Passenger> waitingPassengers;
+
+
 
     #endregion
 
     #region PROPERTIES
+
+    // Add to PROPERTIES region
+    public int PassengerCount => waitingPassengers.Count;
+
+
     /// <summary>
     /// Enables debug viewing for this station.
     /// </summary>
@@ -582,6 +592,9 @@ public class Station
     #endregion
 
     #region METHODS
+
+
+
     /// <summary>
     /// Whether or not a given position in the scene is within the station's collider.
     /// </summary>
@@ -632,11 +645,29 @@ public class Station
     /// <param name="_icon">The sprite to use for this game object</param>
     public void InjectStationObject(GameObject _stationGameObject, Sprite _icon)
     {
+        // Prevent injecting if the station has already been assigned
         if (accessor != null) return;
+
+        // Assign the station GameObject
         accessor = _stationGameObject;
+
+        // Set the position of the station to the defined position
         accessor.transform.position = position;
+
+        // Set the sprite for the station's GameObject
         accessor.GetComponent<SpriteRenderer>().sprite = _icon;
+
+        // Optional: Handle the reference for StationBehavior script
+        // Ensure we can access the behavior for future UI/logic updates
+        StationBehavior behavior = accessor.GetComponent<StationBehavior>();
+
+        // If behavior exists, assign this station reference for further logic (UI updates, etc.)
+        if (behavior != null)
+        {
+            behavior.AssignStation(this);
+        }
     }
+
 
     /// <summary>
     /// Adds a passenger to this station's waiting list.
@@ -661,6 +692,9 @@ public class Station
     {
         waitingPassengers.Remove(passenger);
     }
+
+    
+
 
     #endregion
 }
@@ -2382,6 +2416,9 @@ public class Manager : MonoBehaviour
     [SerializeField] private float timeBetweenPassengerSpawns = 5f; // Adjust as needed
     private Timer passengerSpawnTimer;
 
+    [SerializeField] private int maxPassengersPerStation = 10;
+
+
 
 
     // Station Handling
@@ -2493,6 +2530,11 @@ public class Manager : MonoBehaviour
                 int randomIndex = Random.Range(0, stations.Count);
                 SpawnPassengerAtStation(stations[randomIndex]);
             }
+        }
+
+        if (passengerSpawnTimer.Trigger)
+        {
+            SpawnPassengerAtRandomStation();
         }
 
 
@@ -2729,7 +2771,13 @@ public class Manager : MonoBehaviour
 
     public void SpawnPassengerAtStation(Station station)
     {
-        // Avoid spawning a passenger with a destination same as the current station
+        // Check if the number of passengers at the station is less than the maximum allowed
+        if (station.PassengerCount >= maxPassengersPerStation)
+        {
+            return;  // Don't spawn more passengers if the limit has been reached
+        }
+
+        // Avoid spawning a passenger with a destination the same as the current station
         STATION_SHAPE currentShape = station.Shape;
         STATION_SHAPE destinationShape;
 
@@ -2741,19 +2789,20 @@ public class Manager : MonoBehaviour
         // Create the passenger data
         Passenger newPassenger = new Passenger(destinationShape);
 
-        // Add the passenger to the station's internal list
-        station.AddPassenger(newPassenger);
-
         // Instantiate the passenger GameObject at the station position
-        GameObject passengerGO = Instantiate(passengerPrefab, station.StationTruePosition, Quaternion.identity);
+        GameObject newPassengerGO = Instantiate(passengerPrefab, station.StationTruePosition, Quaternion.identity);
 
         // Assign passenger logic + visual sprite
-        PassengerBehavior behavior = passengerGO.GetComponent<PassengerBehavior>();
+        PassengerBehavior behavior = newPassengerGO.GetComponent<PassengerBehavior>();
         behavior.AssignPassenger(newPassenger, passengerIcons[(int)destinationShape]);
 
         // Optional: Parent it under the station for hierarchy clarity
-        passengerGO.transform.SetParent(station.Accessor.transform);
+        newPassengerGO.transform.SetParent(station.Accessor.transform);
+
+        // Add the passenger to the station's internal list
+        station.AddPassenger(newPassenger);
     }
+
 
 
     private void SpawnPassengerAtRandomStation()
