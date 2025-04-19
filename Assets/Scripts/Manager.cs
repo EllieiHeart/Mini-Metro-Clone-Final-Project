@@ -2349,6 +2349,10 @@ public class Manager : MonoBehaviour
     [SerializeField] private GameObject passengerPrefab;
     [SerializeField] private Sprite[] passengerIcons = new Sprite[(int)STATION_SHAPE.LENGTH];
 
+    [SerializeField] private float timeBetweenPassengerSpawns = 5f; // Adjust as needed
+    private Timer passengerSpawnTimer;
+
+
 
     // Station Handling
     private List<Station> stations;
@@ -2384,6 +2388,9 @@ public class Manager : MonoBehaviour
         // STEP 2:
         // Create starting stations.
         for (int _i = 0; _i < startingStationTotal; ++_i) { CreateStation(); }
+
+        passengerSpawnTimer = CreateTimer(timeBetweenPassengerSpawns, false);
+
 
         // STEP 3:
         // Set variables for camera size change  and station spawning.
@@ -2432,6 +2439,13 @@ public class Manager : MonoBehaviour
             {
                 timer.IncrementTimer(Time.deltaTime);
             }
+
+            // Check if it's time to spawn a passenger
+            if (passengerSpawnTimer.Trigger)
+            {
+                SpawnPassengerAtRandomStation();
+            }
+
 
             // STEP 2:
             // TODO - Camera scaling and spawing of stations over time.
@@ -2706,6 +2720,19 @@ public class Manager : MonoBehaviour
 
         // Optional: Parent it under the station for hierarchy clarity
         passengerGO.transform.SetParent(station.Accessor.transform);
+
+
+    }
+
+    private void SpawnPassengerAtRandomStation()
+    {
+        if (stations.Count == 0) return;
+
+        // Randomly pick an active station
+        int randomIndex = Random.Range(0, stations.Count);
+        Station selectedStation = stations[randomIndex];
+
+        SpawnPassengerAtStation(selectedStation);
     }
     #endregion
     #endregion
