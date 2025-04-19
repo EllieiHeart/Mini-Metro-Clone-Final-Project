@@ -669,31 +669,28 @@ public class Station
     }
 
 
-    /// <summary>
-    /// Adds a passenger to this station's waiting list.
-    /// </summary>
     public void AddPassenger(Passenger passenger)
     {
         waitingPassengers.Add(passenger);
+        UpdatePassengerUI();
     }
 
-    /// <summary>
-    /// Returns all passengers currently at this station.
-    /// </summary>
-    public List<Passenger> GetPassengers()
-    {
-        return waitingPassengers;
-    }
-
-    /// <summary>
-    /// Removes a specific passenger from this station.
-    /// </summary>
     public void RemovePassenger(Passenger passenger)
     {
         waitingPassengers.Remove(passenger);
+        UpdatePassengerUI();
     }
 
-    
+    private void UpdatePassengerUI()
+    {
+        if (accessor != null && accessor.TryGetComponent(out StationBehavior behavior))
+        {
+            behavior.UpdatePassengerCountDisplay(PassengerCount);
+        }
+    }
+
+
+
 
 
     #endregion

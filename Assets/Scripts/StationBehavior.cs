@@ -1,21 +1,23 @@
-using TMPro;
+
 using UnityEngine;
+using TMPro; // If using TextMeshPro
 
 public class StationBehavior : MonoBehaviour
 {
-    private Station stationRef;
-    [SerializeField] private TextMeshPro passengerCountText;
+    [SerializeField] private TextMeshPro passengerCountText; // Drag in inspector
 
-    public void AssignStation(Station station)
+    private Station station;
+
+    public void AssignStation(Station _station)
     {
-        stationRef = station;
+        station = _station;
     }
 
-    private void Update()
+    public void UpdatePassengerCountDisplay(int count)
     {
-        if (stationRef != null && passengerCountText != null)
-        {
-            passengerCountText.text = stationRef.GetPassengers().Count.ToString();
-        }
+        if (passengerCountText == null) return;
+
+        passengerCountText.text = count.ToString();
+        passengerCountText.gameObject.SetActive(count > 0);
     }
 }
