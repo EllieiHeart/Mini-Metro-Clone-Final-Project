@@ -561,8 +561,6 @@ public class Station
     /// <param name="_shape">The shape for this station, converts to enum format internally.</param>
     public Station(Vector2 _position, int _shape)
     {
-
-        
         position = _position;
         shape = (STATION_SHAPE)_shape;
         pointConnections = new Point[8, 3];
@@ -668,10 +666,6 @@ public class Station
         {
             behavior.AssignStation(this);
         }
-
-        Scale = 0.008837679f;
-
-        accessor.transform.localScale = new Vector3 (0.008837679f, 0.008837679f, 1.0f);
     }
 
 
