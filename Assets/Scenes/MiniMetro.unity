@@ -2650,7 +2650,7 @@ MonoBehaviour:
   - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
   - {fileID: 21300000, guid: b27b8197b864e4b459166edd3ffe9192, type: 3}
   maxCameraTime: 60
-  startingStationTotal: 3
+  startingStationTotal: 5
   stationMaximumTotal: 10
   timeBetweenStationSpawns: 15
   isGamePaused: 0

@@ -726,6 +726,7 @@ public class LineManager
 
     // Line dragging variables
     private bool isLineHeld;
+    private bool lineJustCreated;
     private int connectedLineIndex;
     private bool lineGrabbedPreBend;
     private int linesActive;
@@ -761,7 +762,7 @@ public class LineManager
     private float connectedNextAnglePreBendFixed; // Account for if bend is right or left.
     private float connectedNextAnglePostBendFixed;
 
-
+    private float connectedAcrossAngle;
 
     private float playerLineAngle;
     private float oldPlayerLineAngle;
@@ -853,36 +854,47 @@ public class LineManager
 
                 // STEP 1:
                 // Creating a new line by clicking a station.
-                for (int _i = 0; _i < stations.Count; ++_i)
+                if (linesActive < linePoints.Length)
                 {
-                    if (stations[_i].PositionInStationCollider(mouseData.Position))
+                    for (int _i = 0; _i < stations.Count; ++_i)
                     {
-                        // STEP 1:
-                        // Establish line has been grabbed.
-                        isLineHeld = true;
+                        if (stations[_i].PositionInStationCollider(mouseData.Position))
+                        {
+                            // STEP 1:
+                            // Establish line has been grabbed.
+                            isLineHeld = true;
+                            lineJustCreated = true;
+                            connectedLineIndex = linesActive;
+                            linesActive++;
 
-                        // STEP 2:
-                        // Create the previous point.
-                        connectedPreviousPoint = new Point(linePoints[linesActive], stations[_i]);
-                        connectedPreviousPointIndex = linePoints[linesActive].Count;
-                        linePoints[linesActive].Insert(connectedPreviousPointIndex, connectedPreviousPoint);
-                        bendPositions[linesActive].Insert(connectedPreviousPointIndex, Vector2.zero);
+                            // STEP 2:
+                            // Create the previous point.
+                            connectedPreviousPoint = new Point(linePoints[connectedLineIndex], stations[_i]);
+                            connectedPreviousPointIndex = linePoints[connectedLineIndex].Count;
+                            linePoints[connectedLineIndex].Insert(connectedPreviousPointIndex, connectedPreviousPoint);
+                            bendPositions[connectedLineIndex].Insert(connectedPreviousPointIndex, Vector2.zero);
 
-                        // STEP 3:
-                        // Create and insert the mouse point.
-                        linePoints[linesActive].Add(null);
-                        connectedMousePointIndex = connectedPreviousPointIndex + 1;
+                            // STEP 3:
+                            // Create and insert the mouse point.
+                            linePoints[connectedLineIndex].Add(null);
+                            connectedMousePointIndex = connectedPreviousPointIndex + 1;
 
-                        // STEP 4:
-                        // Set initial values.
-                        SetMouseLineAngles();
-                        SetMouseAccessPoints();
-                        SetMouseBends();
+                            // STEP 4:
+                            // Set initial values.
+                            SetMouseLineAngles(mouseData.X, mouseData.Y);
+                            SetMouseAccessPoints();
+                            SetMouseBends(mouseData.X, mouseData.Y);
 
-                        // STEP 5:
-                        // Exit.
-                        _found = true;
-                        break;
+                            // STEP 5:
+                            // Exit.
+                            lastHoveredStation = stations[_i];
+                            _found = true;
+                            break;
+                        }
+                        else if (stations[_i] == lastHoveredStation)
+                        {
+                            lastHoveredStation = null;
+                        }
                     }
                 }
 
@@ -895,6 +907,7 @@ public class LineManager
                         if (_found) break;
                         for (int _bendColliders = 0; _bendColliders < colliders[_line].Count; ++_bendColliders)
                         {
+                            if (colliders[_line][_bendColliders] == null) continue;
                             bool _collisionPreBend = (colliders[_line][_bendColliders][0].PositionInCollider(mouseData.Position));
                             bool _collisionPostBend = (colliders[_line][_bendColliders][1].PositionInCollider(mouseData.Position));
                             if (_collisionPreBend || _collisionPostBend)
@@ -902,28 +915,42 @@ public class LineManager
                                 // STEP 1:
                                 // Establish line that has been grabbed.
                                 isLineHeld = true;
+                                lineJustCreated = false;
+                                connectedLineIndex = _line;
 
                                 // STEP 2:
                                 // Get the previous point.
-                                connectedPreviousPoint = linePoints[_line][_bendColliders];
+                                connectedPreviousPoint = linePoints[connectedLineIndex][_bendColliders];
                                 connectedPreviousPointIndex = _bendColliders;
+                                connectedPreviousPoint.TiedStation.SetPointConnection(
+                                        connectedPreviousPoint.AccessExitAngleIndex,
+                                        connectedPreviousPoint.AccessExitSlot,
+                                        null);
 
                                 // STEP 3:
                                 // Get the next point
-                                connectedNextPoint = linePoints[_line][_bendColliders + 1];
+                                connectedNextPoint = linePoints[connectedLineIndex][_bendColliders + 1];
                                 connectedNextPointIndex = _bendColliders + 2;
+                                connectedNextPoint.TiedStation.SetPointConnection(
+                                        connectedNextPoint.AccessEntryAngleIndex,
+                                        connectedNextPoint.AccessEntrySlot,
+                                        null);
 
                                 // STEP 4:
                                 // Create and insert the mouse point.
-                                linePoints[_line].Insert(_bendColliders + 1, null);
+                                linePoints[connectedLineIndex].Insert(_bendColliders + 1, null);
                                 connectedMousePointIndex = _bendColliders + 1;
-                                bendPositions[_line].Insert(_bendColliders + 1, Vector2.zero);
+                                bendPositions[connectedLineIndex].Insert(_bendColliders + 1, Vector2.zero);
 
                                 // STEP 5:
+                                // Delete Colliders
+                                colliders[connectedLineIndex][_bendColliders] = null;
+
+                                // STEP 6:
                                 // Set initial values.
-                                SetMouseLineAngles();
+                                SetMouseLineAngles(mouseData.X, mouseData.Y);
                                 SetMouseAccessPoints();
-                                SetMouseBends();
+                                SetMouseBends(mouseData.X, mouseData.Y);
 
                                 // STEP 6:
                                 // Exit.
@@ -938,132 +965,36 @@ public class LineManager
         else if (connectedPreviousPoint != null && connectedNextPoint != null)
         {
             // When the mouse has grabbed a line and manages a previous and next point which the mouse is between.
-            SetMouseLineAngles();
-            SetMouseAccessPoints();
-            SetMouseBends();
+            SetMouseLineAngles(mouseData.X, mouseData.Y);
+            bool _accessSuccess = SetMouseAccessPoints();
+            SetMouseBends(mouseData.X, mouseData.Y);
+            bool _lineDropped = BetweenLineEdit(_accessSuccess);
+            
+            // Release the line.
+            if (!_lineDropped && mouseData.LeftReleased)
+            {
+                EndMouseGrabbingLine();
+                if (linePoints[connectedLineIndex].Count <= 1) linePoints[connectedLineIndex].Clear();
+            }
         }
         else if (connectedPreviousPoint != null)
         {
             // When the mouse has just created a line or grabbed the end of a line.
-            SetMouseLineAngles();
-            SetMouseAccessPoints();
-            SetMouseBends();
-
-            /*// Update where the line should start from
-            MouseTempTieStation(
-                    linePoints[connectedLineIndex][connectedPreviousPointIndex]);
-
-            // Update the position of the currently held line's bends.
-            if (connectedPreviousPoint.AccessExitAngleIndex == -1)
+            SetMouseLineAngles(mouseData.X, mouseData.Y);
+            bool _accessSuccess = SetMouseAccessPoints();
+            SetMouseBends(mouseData.X, mouseData.Y);
+            bool _lineDropped = CreatedLineEdit(_accessSuccess);
+            
+            // Release the line.
+            if (!_lineDropped && mouseData.LeftReleased)
             {
-                UpdateBend(
-                        connectedLineIndex, connectedPreviousPointIndex,
-                        connectedPreviousPoint.TiedStation.StationTruePosition.x,
-                        connectedPreviousPoint.TiedStation.StationTruePosition.y,
-                        mouseData.X, mouseData.Y);
-            }
-            else
-            {
-                UpdateBend(
-                        connectedLineIndex, connectedPreviousPointIndex,
-                        connectedPreviousPoint.TiedStation.
-                            AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].x,
-                        connectedPreviousPoint.TiedStation.
-                            AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].y,
-                        mouseData.X, mouseData.Y);
-            }
-
-            // Player can hover over stations.
-            for (int _i = 0; _i < stations.Count; ++_i)
-            {
-                if (stations[_i].PositionInStationCollider(mouseData.Position) && lastHoveredStation != stations[_i])
+                EndMouseGrabbingLine();
+                if (linePoints[connectedLineIndex].Count <= 1)
                 {
-                    bool _stationExists = false;
-                    for (int _j = 1; _j < linePoints[connectedLineIndex].Count; ++_j)
-                    {
-                        if (linePoints[connectedLineIndex][_j] == null) continue;
-                        if (linePoints[connectedLineIndex][_j].TiedStation == stations[_i])
-                        {
-                            _stationExists = true;
-                            break;
-                        }
-                    }
-
-                    // Check for 0 index to allow for looping.
-                    bool _completeLoop = false;                    
-                    if (linePoints[connectedLineIndex][0].TiedStation == stations[_i])
-                    {
-                        if (linePoints[connectedLineIndex].Count <= 3) _stationExists = true;
-                        else _completeLoop = true;
-                    }
-
-                    if (!_stationExists)
-                    {
-                        Point _possibleNewPoint = new Point(linePoints[connectedLineIndex], stations[_i]);
-                        if (TiePointsToStations(linePoints[connectedLineIndex][connectedPreviousPointIndex], _possibleNewPoint) == false) break;
-                        
-                        // Set the collider for the new line created.
-                        UpdateBend(
-                                connectedLineIndex, connectedPreviousPointIndex,
-                                connectedPreviousPoint.TiedStation.
-                                    AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].x,
-                                connectedPreviousPoint.TiedStation.
-                                    AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].y,
-                                _possibleNewPoint.TiedStation.
-                                    AccessConnections[_possibleNewPoint.AccessEntryAngleIndex, _possibleNewPoint.AccessEntrySlot].x,
-                                _possibleNewPoint.TiedStation.
-                                    AccessConnections[_possibleNewPoint.AccessEntryAngleIndex, _possibleNewPoint.AccessEntrySlot].y);
-                        colliders[connectedLineIndex].Add(new AngledRectCollider[2]);
-                        SetCollider(
-                                connectedLineIndex, connectedPreviousPointIndex,
-                                connectedPreviousPoint.TiedStation.
-                                    AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].x,
-                                connectedPreviousPoint.TiedStation.
-                                    AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].y,
-                                _possibleNewPoint.TiedStation.
-                                    AccessConnections[_possibleNewPoint.AccessEntryAngleIndex, _possibleNewPoint.AccessEntrySlot].x,
-                                _possibleNewPoint.TiedStation.
-                                    AccessConnections[_possibleNewPoint.AccessEntryAngleIndex, _possibleNewPoint.AccessEntrySlot].y);
-
-                        // Create new line from scratch.
-                        connectedPreviousPoint = _possibleNewPoint;
-                        linePoints[connectedLineIndex].Insert(
-                                linePoints[connectedLineIndex].Count - 1, connectedPreviousPoint);
-
-                        bendPositions[connectedLineIndex].Add(Vector2.zero);
-
-                        connectedPreviousPointIndex++;
-                        MouseTempTieStation(
-                                linePoints[connectedLineIndex][connectedPreviousPointIndex]);
-                        if (connectedPreviousPoint.AccessExitAngleIndex == -1)
-                        {
-                            UpdateBend(
-                                    connectedLineIndex, connectedPreviousPointIndex,
-                                    connectedPreviousPoint.TiedStation.StationTruePosition.x,
-                                    connectedPreviousPoint.TiedStation.StationTruePosition.y,
-                                    mouseData.X, mouseData.Y);
-                        }
-                        else
-                        {
-                            UpdateBend(
-                                    connectedLineIndex, connectedPreviousPointIndex,
-                                    connectedPreviousPoint.TiedStation.
-                                        AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].x,
-                                    connectedPreviousPoint.TiedStation.
-                                        AccessConnections[connectedPreviousPoint.AccessExitAngleIndex, connectedPreviousPoint.AccessExitSlot].y,
-                                    mouseData.X, mouseData.Y);
-                        }
-                        if (_completeLoop) MouseDropLine(true);
-                    }
+                    linesActive--;
+                    linePoints[connectedLineIndex].Clear();
                 }
-                lastHoveredStation = stations[_i];
             }
-
-            if (mouseData.LeftReleased)
-            {
-                // Set the collider for the new line created.
-                MouseDropLine(false);
-            }*/
         }
         else
         {
@@ -1071,6 +1002,526 @@ public class LineManager
         }
 
         UpdateRenderer();
+    }
+
+    private bool BetweenLineEdit (bool _accessSuccess)
+    {
+        for (int _i = 0; _i < stations.Count; ++_i)
+        {
+            // Make sure within station's collider, this station hasn't been visited last, and that accessing is possible.
+            if (stations[_i].PositionInStationCollider(mouseData.Position) && lastHoveredStation != stations[_i] && _accessSuccess)
+            {
+                // STEP 1:
+                // Establish that this station has now been hovered over.
+                lastHoveredStation = stations[_i];
+
+                // STEP 2:
+                // Determine what kind of edit to the points in the line this will be.+
+                int _interaction = 0;
+                for (int _j = 0; _j < linePoints[connectedLineIndex].Count; ++_j)
+                {
+                    if (linePoints[connectedLineIndex][_j] == null) continue;
+                    if (stations[_i] == linePoints[connectedLineIndex][_j].TiedStation)
+                    {
+                        // The point hovered over is on the line.
+                        if (linePoints[connectedLineIndex][_j] == connectedPreviousPoint)
+                        {
+                            // Station found is previous.
+                            if (_j == 0)
+                            {
+                                // Station found is the first one in the line.
+                                // Should remove the previous and convert to grabbing start.
+                                _interaction = 1;
+                            }
+                            else
+                            {
+                                // Should remove the previous.
+                                _interaction = 2;
+                            }
+                        }
+                        else if (linePoints[connectedLineIndex][_j] == connectedNextPoint)
+                        {
+                            // Station found is next.
+                            if (_j == linePoints[connectedLineIndex].Count - 1)
+                            {
+                                // Station found is the last one in the line.
+                                // Should convert to grabbing end.
+                                _interaction = 3;
+                            }
+                            else
+                            {
+                                // Should remove the next.
+                                _interaction = 4;
+                            }
+                        }
+                        else
+                        {
+                            // Not allowed to connect this point.
+                            _interaction = 5;
+                        }
+                    }
+                }
+
+                switch (_interaction)
+                {
+                    case 0:
+                        // Point is not on the line at all, and should be added.
+                        // STEP 1:
+                        // Insert the new point.
+                        Point _nextPoint = connectedNextPoint;
+                        connectedNextPoint = null;
+                        Point _possiblePoint = new Point(linePoints[connectedLineIndex], stations[_i]);
+                        if (!SetFinalAccessPoints(_possiblePoint)) return false;
+                        SetFinalBends(_possiblePoint);
+                        SetFinalCollider(_possiblePoint);
+                        connectedPreviousPoint = _possiblePoint;
+                        connectedPreviousPointIndex++;
+                        linePoints[connectedLineIndex].Insert(connectedPreviousPointIndex, connectedPreviousPoint);
+                        bendPositions[connectedLineIndex].Insert(connectedPreviousPointIndex, Vector2.zero);
+                        connectedNextPoint = _nextPoint;
+                        connectedNextPointIndex++;
+
+                        // STEP 2:
+                        // Update other information.
+                        connectedMousePointIndex++;
+                        SetMouseLineAngles(mouseData.Position.x, mouseData.Position.y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.Position.x, mouseData.Position.y);
+
+                        // STEP 5:
+                        // Exit.
+                        return false;
+
+                    case 1:
+                        // Remove the first station in the line.
+                        // STEP 1:
+                        // Remove the previous first.
+                        linePoints[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        bendPositions[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        colliders[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        connectedPreviousPoint = null;
+
+                        // STEP 2:
+                        // Update the new previous line.
+                        /*SetMouseLineAngles(mouseData.X, mouseData.Y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.X, mouseData.Y);*/
+                        // TODO make this shit works
+                        // STEP 3:
+                        // Exit.
+                        return false;
+
+                    case 2:
+                        // Remove the previous station.
+                        // STEP 1:
+                        // Remove the previous point and hook up previous to previous.
+                        linePoints[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        bendPositions[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        colliders[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+                        connectedPreviousPointIndex--;
+                        connectedPreviousPoint = linePoints[connectedLineIndex][connectedPreviousPointIndex];
+                        colliders[connectedLineIndex][connectedPreviousPointIndex] = null;
+                        connectedNextPointIndex--;
+                        connectedMousePointIndex--;
+
+                        // STEP 2:
+                        // Update the new previous line.
+                        SetMouseLineAngles(mouseData.X, mouseData.Y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.X, mouseData.Y);
+
+                        // STEP 3:
+                        // Exit.
+                        return false;
+
+                    case 3:
+                        // Remove the last station in the line.
+                        // Remove the next station.
+                        // STEP 1:
+                        // Remove the next last.
+                        linePoints[connectedLineIndex].RemoveAt(connectedNextPointIndex);
+                        connectedNextPoint = null;
+                        Debug.Log(connectedPreviousPointIndex);
+                        // STEP 2:
+                        // Update the new previous line.
+                        SetMouseLineAngles(mouseData.X, mouseData.Y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.X, mouseData.Y);
+
+                        // STEP 3:
+                        // Exit.
+                        return false;
+
+                    case 4:
+                        // Remove the next station.
+                        // STEP 1:
+                        // Remove the next.
+                        linePoints[connectedLineIndex].RemoveAt(connectedNextPointIndex);
+                        bendPositions[connectedLineIndex].RemoveAt(connectedNextPointIndex - 1);
+                        colliders[connectedLineIndex].RemoveAt(connectedNextPointIndex - 1);
+                        connectedNextPoint = linePoints[connectedLineIndex][connectedNextPointIndex];
+
+                        // STEP 2:
+                        // Update the new previous line.
+                        SetMouseLineAngles(mouseData.X, mouseData.Y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.X, mouseData.Y);
+
+                        // STEP 3:
+                        // Exit.
+                        return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    private bool CreatedLineEdit (bool _accessSuccess)
+    {
+        for (int _i = 0; _i < stations.Count; ++_i)
+        {
+            // Make sure within station's collider, this station hasn't been visited last, and that accessing is possible.
+            if (stations[_i].PositionInStationCollider(mouseData.Position) && lastHoveredStation != stations[_i] && _accessSuccess)
+            {
+                // STEP 1:
+                // Establish that this station has now been hovered over.
+                lastHoveredStation = stations[_i];
+
+                // STEP 2:
+                // Determine what kind of edit to the points in the line this will be.+
+                int _interaction = 0;
+                for (int _j = 0; _j < linePoints[connectedLineIndex].Count; ++_j)
+                {
+                    if (linePoints[connectedLineIndex][_j] == null) continue;
+                    if (stations[_i] == linePoints[connectedLineIndex][_j].TiedStation)
+                    {
+                        // The point hovered over is on the line.
+                        if (_j == 0)
+                        {
+                            // Station found is the first one in the line.
+                            if (linePoints[connectedLineIndex].Count == 3)
+                            {
+                                // Returning to first slot after making a line between 2 stations and nothing else.
+                                // Ends the current line drawing.
+                                _interaction = 1;
+                            }
+                            else if (linePoints[connectedLineIndex].Count > 3)
+                            {
+                                // Returning to first point to finish loop.
+                                // Ends current line drawing.
+                                _interaction = 2;
+                            }
+                            else
+                            {
+                                // Not allowed to connect this point.
+                                _interaction = 3;
+                            }
+                        }
+                        else
+                        {
+                            // Not allowed to connect this point.
+                            _interaction = 3;
+                        }
+                    }
+                }
+
+                switch (_interaction)
+                {
+                    case 0:
+                        // Point is not on the line at all, and should be added.
+                        // STEP 1:
+                        // Insert the new point.
+                        Point _possiblePoint = new Point(linePoints[connectedLineIndex], stations[_i]);
+                        if (!SetFinalAccessPoints(_possiblePoint)) return false;
+                        SetFinalBends(_possiblePoint);
+                        SetFinalCollider(_possiblePoint);
+                        connectedPreviousPoint = _possiblePoint;
+                        connectedPreviousPointIndex = linePoints[connectedLineIndex].Count - 1;
+                        linePoints[connectedLineIndex].Insert(connectedPreviousPointIndex, connectedPreviousPoint);
+                        bendPositions[connectedLineIndex].Insert(connectedPreviousPointIndex, Vector2.zero);
+
+                        // STEP 2:
+                        // Update other information.
+                        connectedMousePointIndex++;
+                        SetMouseLineAngles(mouseData.X, mouseData.Y);
+                        SetMouseAccessPoints();
+                        SetMouseBends(mouseData.X, mouseData.Y);
+
+                        // STEP 5:
+                        // Exit.
+                        return false;
+
+                    case 1:
+                        // Point is the first in the line when there are only 2 points.
+                        // Delete the current mouse line.
+                        EndMouseGrabbingLine();
+                        return true;
+
+                    case 2:
+                        // Point is the first in the line and a loop is being completed.
+                        Point _possibleLoopPoint = new Point(linePoints[connectedLineIndex], stations[_i]);
+                        if (!SetFinalAccessPoints(_possibleLoopPoint)) return false;
+                        SetFinalBends(_possibleLoopPoint);
+                        SetFinalCollider(_possibleLoopPoint);
+                        connectedPreviousPoint = _possibleLoopPoint;
+                        connectedPreviousPointIndex = linePoints[connectedLineIndex].Count - 1;
+                        linePoints[connectedLineIndex].Insert(connectedPreviousPointIndex, connectedPreviousPoint);
+                        bendPositions[connectedLineIndex].Insert(connectedPreviousPointIndex, Vector2.zero);
+
+                        // STEP 2:
+                        // Update other information.
+                        connectedMousePointIndex++;
+                        EndMouseGrabbingLine();
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void EndMouseGrabbingLine()
+    {
+        if (connectedPreviousPoint != null && connectedNextPoint != null)
+        {
+            // Both points exists.
+            linePoints[connectedLineIndex].RemoveAt(connectedMousePointIndex);
+            bendPositions[connectedLineIndex].RemoveAt(connectedMousePointIndex);
+            colliders[connectedLineIndex].Remove(null);
+
+            Point _storedNext = connectedNextPoint;
+            connectedNextPoint = null;
+
+            SetMouseLineAngles(_storedNext.TiedStation.StationTruePosition.x, _storedNext.TiedStation.StationTruePosition.y);
+            SetMouseAccessPoints();
+            SetMouseBends(_storedNext.TiedStation.StationTruePosition.x, _storedNext.TiedStation.StationTruePosition.y);
+
+            SetFinalAccessPoints(_storedNext);
+            SetFinalBends(_storedNext);
+            SetFinalCollider(_storedNext);
+        }
+        else if (connectedPreviousPoint != null)
+        {
+            // Only previous point exists.
+            Debug.Log(linePoints[connectedLineIndex].Count);
+            Debug.Log(connectedPreviousPointIndex);
+            connectedPreviousPoint.AccessExitAngleIndex = -1;
+            connectedPreviousPoint.AccessExitSlot = -1;
+            bendPositions[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
+        }
+        else if (connectedNextPoint != null)
+        {
+            // Only next point exists.
+        }
+
+        // Total handling.
+        linePoints[connectedLineIndex].Remove(null);
+        connectedPreviousPoint = null;
+        connectedNextPoint = null;
+        isLineHeld = false;
+        lastHoveredStation = null;
+    }
+
+    private bool SetFinalAccessPoints(Point _possiblePoint)
+    {
+        if (connectedPreviousPoint != null && connectedNextPoint != null)
+        {
+            // Grabbing between two points.
+            int _indexedPreviousAnglePreBend = 0;
+            int _indexedPreviousAnglePostBend = 0;
+            if (connectedPreviousAngleTrue >= 358.0f || connectedPreviousAngleTrue <= 2.0f)
+            {
+                _indexedPreviousAnglePreBend = 0;
+                _indexedPreviousAnglePostBend = 4;
+            }
+            else if (connectedPreviousAngleTrue >= 43.0f && connectedPreviousAngleTrue <= 47.0f)
+            {
+                _indexedPreviousAnglePreBend = 1;
+                _indexedPreviousAnglePostBend = 5;
+            }
+            else if (connectedPreviousAngleTrue >= 88.0f && connectedPreviousAngleTrue <= 92.0f)
+            {
+                _indexedPreviousAnglePreBend = 2;
+                _indexedPreviousAnglePostBend = 6;
+            }
+            else if (connectedPreviousAngleTrue >= 133.0f && connectedPreviousAngleTrue <= 137.0f)
+            {
+                _indexedPreviousAnglePreBend = 3;
+                _indexedPreviousAnglePostBend = 7;
+            }
+            else if (connectedPreviousAngleTrue >= 178.0f && connectedPreviousAngleTrue <= 182.0f)
+            {
+                _indexedPreviousAnglePreBend = 4;
+                _indexedPreviousAnglePostBend = 0;
+            }
+            else if (connectedPreviousAngleTrue >= 223.0f && connectedPreviousAngleTrue <= 227.0f)
+            {
+                _indexedPreviousAnglePreBend = 5;
+                _indexedPreviousAnglePostBend = 1;
+            }
+            else if (connectedPreviousAngleTrue >= 268.0f && connectedPreviousAngleTrue <= 272.0f)
+            {
+                _indexedPreviousAnglePreBend = 6;
+                _indexedPreviousAnglePostBend = 2;
+            }
+            else if (connectedPreviousAngleTrue >= 312.0f && connectedPreviousAngleTrue <= 317.0f)
+            {
+                _indexedPreviousAnglePreBend = 7;
+                _indexedPreviousAnglePostBend = 3;
+            }
+            else
+            {
+                _indexedPreviousAnglePreBend = (int)(connectedPreviousAnglePreBend / 45.0f);
+                _indexedPreviousAnglePreBend =
+                        (bendRight)
+                            ? (_indexedPreviousAnglePreBend == 7) ? 0 : _indexedPreviousAnglePreBend + 1
+                            : _indexedPreviousAnglePreBend;
+
+                _indexedPreviousAnglePostBend = (int)(Mathf.Repeat(connectedPreviousAnglePostBend - 180, 360) / 45.0f);
+                _indexedPreviousAnglePostBend =
+                        (bendRight)
+                            ? (_indexedPreviousAnglePostBend == 0) ? 7 : _indexedPreviousAnglePostBend - 1
+                            : _indexedPreviousAnglePostBend;
+            }
+
+            for (int _i = 0; _i < 3; ++_i)
+            {
+                int _iInverse = _i;
+                switch (_i)
+                {
+                    case 1:
+                        _iInverse = 2;
+                        break;
+
+                    case 2:
+                        _iInverse = 1;
+                        break;
+                }
+                if (connectedPreviousPoint.TiedStation.GetPointConnection(_indexedPreviousAnglePreBend, _i) == null &&
+                    _possiblePoint.TiedStation.GetPointConnection(_indexedPreviousAnglePostBend, _iInverse) == null)
+                {
+                    connectedPreviousPoint.AccessExitAngleIndex = _indexedPreviousAnglePreBend;
+                    connectedPreviousPoint.AccessExitSlot = _i;
+                    connectedPreviousPoint.TiedStation.SetPointConnection(_indexedPreviousAnglePreBend, _i, connectedPreviousPoint);
+                    _possiblePoint.AccessEntryAngleIndex = _indexedPreviousAnglePostBend;
+                    _possiblePoint.AccessEntrySlot = _iInverse;
+                    _possiblePoint.TiedStation.SetPointConnection(_indexedPreviousAnglePostBend, _iInverse, _possiblePoint);
+                    return true;
+                }
+            }
+            // Attempt failed
+            connectedPreviousPoint.AccessExitAngleIndex = -1;
+            connectedPreviousPoint.AccessExitSlot = -1;
+            _possiblePoint.AccessEntryAngleIndex = -1;
+            _possiblePoint.AccessEntrySlot = -1;
+            return false;
+        }
+        else if (connectedPreviousPoint == null)
+        {
+            // Grabbing the line from its creation point.
+            int _indexedNextAngle = (int)(Mathf.Repeat(connectedPreviousAnglePostBend - 180.0f, 360.0f) / 45.0f);
+            for (int _i = 0; _i < 3; ++_i)
+            {
+                if (connectedNextPoint.TiedStation.GetPointConnection(_indexedNextAngle, _i) == null)
+                {
+                    connectedNextPoint.AccessExitAngleIndex = _indexedNextAngle;
+                    connectedNextPoint.AccessExitSlot = _i;
+                    return true;
+                }
+            }
+
+            // Attempt failed
+            connectedNextPoint.AccessExitAngleIndex = -1;
+            connectedNextPoint.AccessExitSlot = -1;
+            return false;
+        }
+        else
+        {
+            // Grabbing the line from its final point.
+            int _indexedPreviousAnglePreBend = 0;
+            int _indexedPreviousAnglePostBend = 0;
+            if (connectedPreviousAngleTrue >= 358.0f || connectedPreviousAngleTrue <= 2.0f)
+            {
+                _indexedPreviousAnglePreBend = 0;
+                _indexedPreviousAnglePostBend = 4;
+            }
+            else if (connectedPreviousAngleTrue >= 43.0f && connectedPreviousAngleTrue <= 47.0f)
+            {
+                _indexedPreviousAnglePreBend = 1;
+                _indexedPreviousAnglePostBend = 5;
+            }
+            else if (connectedPreviousAngleTrue >= 88.0f && connectedPreviousAngleTrue <= 92.0f)
+            {
+                _indexedPreviousAnglePreBend = 2;
+                _indexedPreviousAnglePostBend = 6;
+            }
+            else if (connectedPreviousAngleTrue >= 133.0f && connectedPreviousAngleTrue <= 137.0f)
+            {
+                _indexedPreviousAnglePreBend = 3;
+                _indexedPreviousAnglePostBend = 7;
+            }
+            else if (connectedPreviousAngleTrue >= 178.0f && connectedPreviousAngleTrue <= 182.0f)
+            {
+                _indexedPreviousAnglePreBend = 4;
+                _indexedPreviousAnglePostBend = 0;
+            }
+            else if (connectedPreviousAngleTrue >= 223.0f && connectedPreviousAngleTrue <= 227.0f)
+            {
+                _indexedPreviousAnglePreBend = 5;
+                _indexedPreviousAnglePostBend = 1;
+            }
+            else if (connectedPreviousAngleTrue >= 268.0f && connectedPreviousAngleTrue <= 272.0f)
+            {
+                _indexedPreviousAnglePreBend = 6;
+                _indexedPreviousAnglePostBend = 2;
+            }
+            else if (connectedPreviousAngleTrue >= 312.0f && connectedPreviousAngleTrue <= 317.0f)
+            {
+                _indexedPreviousAnglePreBend = 7;
+                _indexedPreviousAnglePostBend = 3;
+            }
+            else
+            {
+                _indexedPreviousAnglePreBend = (int)(connectedPreviousAnglePreBend / 45.0f);
+                _indexedPreviousAnglePreBend =
+                        (bendRight)
+                            ? (_indexedPreviousAnglePreBend == 7) ? 0 : _indexedPreviousAnglePreBend + 1
+                            : _indexedPreviousAnglePreBend;
+
+                _indexedPreviousAnglePostBend = (int)(Mathf.Repeat(connectedPreviousAnglePostBend - 180, 360) / 45.0f);
+                _indexedPreviousAnglePostBend =
+                        (bendRight)
+                            ? (_indexedPreviousAnglePostBend == 0) ? 7 : _indexedPreviousAnglePostBend - 1
+                            : _indexedPreviousAnglePostBend;
+            }
+
+            for (int _i = 0; _i < 3; ++_i)
+            {
+                int _iInverse = _i;
+                switch (_i)
+                {
+                    case 1:
+                        _iInverse = 2;
+                        break;
+
+                    case 2:
+                        _iInverse = 1;
+                        break;
+                }
+                if (connectedPreviousPoint.TiedStation.GetPointConnection(_indexedPreviousAnglePreBend, _i) == null &&
+                    _possiblePoint.TiedStation.GetPointConnection(_indexedPreviousAnglePostBend, _iInverse) == null)
+                {
+                    connectedPreviousPoint.AccessExitAngleIndex = _indexedPreviousAnglePreBend;
+                    connectedPreviousPoint.AccessExitSlot = _i;
+                    connectedPreviousPoint.TiedStation.SetPointConnection(_indexedPreviousAnglePreBend, _i, connectedPreviousPoint);
+                    _possiblePoint.AccessEntryAngleIndex = _indexedPreviousAnglePostBend;
+                    _possiblePoint.AccessEntrySlot = _iInverse;
+                    _possiblePoint.TiedStation.SetPointConnection(_indexedPreviousAnglePostBend, _iInverse, _possiblePoint);
+                    return true;
+                }
+            }
+        }
+        // Attempt failed
+        return false;
     }
 
     /// <summary>
@@ -1084,7 +1535,15 @@ public class LineManager
         {
             // Grabbing between two points.
             int _indexedPreviousAngle = (int)(connectedPreviousAnglePreBend / 45.0f);
+            _indexedPreviousAngle =
+                    (bendRight)
+                        ? (_indexedPreviousAngle == 7) ? 0 : _indexedPreviousAngle + 1
+                        : _indexedPreviousAngle;
             int _indexedNextAngle = (int)(Mathf.Repeat(connectedPreviousAnglePostBend - 180.0f, 360.0f) / 45.0f);
+            /*_indexedNextAngle =
+                    (bendRight)
+                        ? (_indexedNextAngle == 0) ? 7 : _indexedNextAngle - 1
+                        : _indexedNextAngle;*/
             for (int _i = 0; _i < 3; ++_i)
             {
                 int _iInverse = _i;
@@ -1102,10 +1561,7 @@ public class LineManager
                 if (connectedPreviousPoint.TiedStation.GetPointConnection(_indexedPreviousAngle, _i) == null &&
                     connectedPreviousPoint.TiedStation.GetPointConnection(_indexedNextAngle, _iInverse) == null)
                 {
-                    connectedPreviousPoint.AccessExitAngleIndex =
-                            (bendRight)
-                            ? (_indexedPreviousAngle == 7) ? 0 : _indexedPreviousAngle + 1
-                            : _indexedPreviousAngle;
+                    connectedPreviousPoint.AccessExitAngleIndex = _indexedPreviousAngle;
                     connectedPreviousPoint.AccessExitSlot = _i;
                     connectedNextPoint.AccessEntryAngleIndex = _indexedNextAngle;
                     connectedNextPoint.AccessEntrySlot = _iInverse;
@@ -1144,14 +1600,17 @@ public class LineManager
         {
             // Grabbing the line from its final point.
             int _indexedPreviousAngle = (int)(connectedPreviousAnglePreBend / 45.0f);
+            _indexedPreviousAngle =
+                    (bendRight)
+                        ? (_indexedPreviousAngle == 7) ? 0 : _indexedPreviousAngle + 1
+                        : _indexedPreviousAngle;
             for (int _i = 0; _i < 3; ++_i)
             {
-                if (connectedPreviousPoint.TiedStation.GetPointConnection(_indexedPreviousAngle, _i) == null)
+                if (connectedPreviousPoint.TiedStation.GetPointConnection(_indexedPreviousAngle, _i) == null &&
+                    (connectedPreviousPoint.AccessEntryAngleIndex != connectedPreviousPoint.AccessExitAngleIndex ||
+                     connectedPreviousPoint.AccessEntryAngleIndex == -1))
                 {
-                    connectedPreviousPoint.AccessExitAngleIndex =
-                            (bendRight)
-                            ? (_indexedPreviousAngle == 7) ? 0 : _indexedPreviousAngle + 1
-                            : _indexedPreviousAngle;
+                    connectedPreviousPoint.AccessExitAngleIndex = _indexedPreviousAngle;
                     connectedPreviousPoint.AccessExitSlot = _i;
                     return true;
                 }
@@ -1167,12 +1626,26 @@ public class LineManager
     /// <summary>
     /// Sets the all actual angles to be used for the lines formed around the player's mouse.
     /// </summary>
-    private void SetMouseLineAngles()
+    private void SetMouseLineAngles(float _mouseX, float _mouseY)
     {
         // STEP 1:
         // Set old angles.
         connectedPreviousAngleOld = connectedPreviousAngleTrue;
         connectedNextAngleOld = connectedNextAngleTrue;
+
+        // Angle from previous start to next end, used for when line is dropped.
+        if (connectedPreviousPoint != null && connectedNextPoint != null)
+        {
+            connectedAcrossAngle =
+                    Mathf.Floor(Mathf.Repeat(
+                        Mathf.Atan2(
+                            connectedNextPoint.TiedStation.StationTruePosition.y 
+                            - connectedPreviousPoint.TiedStation.StationTruePosition.y,
+                            connectedNextPoint.TiedStation.StationTruePosition.y 
+                            - connectedPreviousPoint.TiedStation.StationTruePosition.x)
+                        * Mathf.Rad2Deg,
+                        360.0f));
+        }
 
         // STEP 1:
         // Calculate the true angle from the previous point if possible.
@@ -1181,8 +1654,8 @@ public class LineManager
             connectedPreviousAngleTrue =
                     Mathf.Floor(Mathf.Repeat(
                         Mathf.Atan2(
-                            mouseData.Y - connectedPreviousPoint.TiedStation.StationTruePosition.y,
-                            mouseData.X - connectedPreviousPoint.TiedStation.StationTruePosition.x)
+                            _mouseY - connectedPreviousPoint.TiedStation.StationTruePosition.y,
+                            _mouseX - connectedPreviousPoint.TiedStation.StationTruePosition.x)
                         * Mathf.Rad2Deg,
                         360.0f));
 
@@ -1226,11 +1699,10 @@ public class LineManager
             connectedNextAngleTrue =
                     Mathf.Floor(Mathf.Repeat(
                         Mathf.Atan2(
-                            mouseData.Y - connectedNextPoint.TiedStation.StationTruePosition.y,
-                            mouseData.X - connectedNextPoint.TiedStation.StationTruePosition.x)
+                            _mouseY - connectedNextPoint.TiedStation.StationTruePosition.y,
+                            _mouseX - connectedNextPoint.TiedStation.StationTruePosition.x)
                         * Mathf.Rad2Deg,
                         360.0f));
-
 
             // STEP 4:
             // Calculate the angles for the next point.
@@ -1269,10 +1741,18 @@ public class LineManager
     /// <summary>
     /// Creates the bending points for lines.
     /// </summary>
-    private void SetMouseBends()
+    private void SetFinalBends (Point _connectedPoint)
     {
         // STEP 1:
         // Set bend position for the previous line if possible.
+        float _connectedX = 
+                _connectedPoint.TiedStation.AccessConnections
+                    [_connectedPoint.AccessEntryAngleIndex,
+                     _connectedPoint.AccessEntrySlot].x;
+        float _connectedY =
+                _connectedPoint.TiedStation.AccessConnections
+                    [_connectedPoint.AccessEntryAngleIndex,
+                     _connectedPoint.AccessEntrySlot].y;
         if (connectedPreviousPoint != null)
         {
             float _previousX =
@@ -1292,43 +1772,43 @@ public class LineManager
             {
                 if (connectedPreviousAnglePreBend == 0 && connectedPreviousAnglePostBend == 45)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX + Mathf.Abs(mouseData.Position.y - _previousY), mouseData.Position.y);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX + Mathf.Abs(_connectedY - _previousY), _connectedY);
                 }
                 else if (connectedPreviousAnglePreBend == 45 && connectedPreviousAnglePostBend == 90)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX, mouseData.Position.y - Mathf.Abs(_previousX - mouseData.Position.x));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX, _connectedY - Mathf.Abs(_previousX - _connectedX));
                 }
                 else if (connectedPreviousAnglePreBend == 90 && connectedPreviousAnglePostBend == 135)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x, _previousY + Mathf.Abs(mouseData.Position.x - _previousX));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX, _previousY + Mathf.Abs(_connectedX - _previousX));
                 }
                 else if (connectedPreviousAnglePreBend == 135 && connectedPreviousAnglePostBend == 180)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x + Mathf.Abs(_previousY - mouseData.Position.y), _previousY);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX + Mathf.Abs(_previousY - _connectedY), _previousY);
                 }
                 else if (connectedPreviousAnglePreBend == 180 && connectedPreviousAnglePostBend == 225)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX - Mathf.Abs(mouseData.Position.y - _previousY), mouseData.Position.y);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX - Mathf.Abs(_connectedY - _previousY), _connectedY);
                 }
                 else if (connectedPreviousAnglePreBend == 225 && connectedPreviousAnglePostBend == 270)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX, mouseData.Position.y + Mathf.Abs(_previousX - mouseData.Position.x));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX, _connectedY + Mathf.Abs(_previousX - _connectedX));
                 }
                 else if (connectedPreviousAnglePreBend == 270 && connectedPreviousAnglePostBend == 315)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x, _previousY - Mathf.Abs(mouseData.Position.x - _previousX));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX, _previousY - Mathf.Abs(_connectedX - _previousX));
                 }
                 else if (connectedPreviousAnglePreBend == 315 && connectedPreviousAnglePostBend == 0)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x - Mathf.Abs(_previousY - mouseData.Position.y), _previousY);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX - Mathf.Abs(_previousY - _connectedY), _previousY);
                 }
 
                 // Set the proper angle for calculations.
@@ -1339,43 +1819,43 @@ public class LineManager
             {
                 if (connectedPreviousAnglePreBend == 0 && connectedPreviousAnglePostBend == 45)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x - Mathf.Abs(_previousY - mouseData.Position.y), _previousY);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX - Mathf.Abs(_previousY - _connectedY), _previousY);
                 }
                 else if (connectedPreviousAnglePreBend == 45 && connectedPreviousAnglePostBend == 90)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x, _previousY + Mathf.Abs(mouseData.Position.x - _previousX));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX, _previousY + Mathf.Abs(_connectedX - _previousX));
                 }
                 else if (connectedPreviousAnglePreBend == 90 && connectedPreviousAnglePostBend == 135)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX, mouseData.Position.y - Mathf.Abs(_previousX - mouseData.Position.x));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX, _connectedY - Mathf.Abs(_previousX - _connectedX));
                 }
                 else if (connectedPreviousAnglePreBend == 135 && connectedPreviousAnglePostBend == 180)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX - Mathf.Abs(mouseData.Position.y - _previousY), mouseData.Position.y);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX - Mathf.Abs(_connectedY - _previousY), _connectedY);
                 }
                 else if (connectedPreviousAnglePreBend == 180 && connectedPreviousAnglePostBend == 225)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x + Mathf.Abs(_previousY - mouseData.Position.y), _previousY);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX + Mathf.Abs(_previousY - _connectedY), _previousY);
                 }
                 else if (connectedPreviousAnglePreBend == 225 && connectedPreviousAnglePostBend == 270)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(mouseData.Position.x, _previousY - Mathf.Abs(mouseData.Position.x - _previousX));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_connectedX, _previousY - Mathf.Abs(_connectedX - _previousX));
                 }
                 else if (connectedPreviousAnglePreBend == 270 && connectedPreviousAnglePostBend == 315)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX, mouseData.Position.y + Mathf.Abs(_previousX - mouseData.Position.x));
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX, _connectedY + Mathf.Abs(_previousX - _connectedX));
                 }
                 else if (connectedPreviousAnglePreBend == 315 && connectedPreviousAnglePostBend == 0)
                 {
-                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
-                            new Vector2(_previousX + Mathf.Abs(mouseData.Position.y - _previousY), mouseData.Position.y);
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] =
+                            new Vector2(_previousX + Mathf.Abs(_connectedY - _previousY), _connectedY);
                 }
 
                 // Set the proper angle for calculations.
@@ -1406,42 +1886,42 @@ public class LineManager
                 if (connectedNextAnglePreBend == 0 && connectedNextAnglePostBend == 45)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(mouseData.Position.x - Mathf.Abs(_nextY - mouseData.Position.y), _nextY);
+                            new Vector2(_connectedX - Mathf.Abs(_nextY - _connectedY), _nextY);
                 }
                 else if (connectedNextAnglePreBend == 45 && connectedNextAnglePostBend == 90)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(mouseData.Position.x, _nextY + Mathf.Abs(mouseData.Position.x - _nextX));
+                            new Vector2(_connectedX, _nextY + Mathf.Abs(_connectedX - _nextX));
                 }
                 else if (connectedNextAnglePreBend == 90 && connectedNextAnglePostBend == 135)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(_nextX, mouseData.Position.y - Mathf.Abs(_nextX - mouseData.Position.x));
+                            new Vector2(_nextX, _connectedY - Mathf.Abs(_nextX - _connectedX));
                 }
                 else if (connectedNextAnglePreBend == 135 && connectedNextAnglePostBend == 180)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(_nextX - Mathf.Abs(mouseData.Position.y - _nextY), mouseData.Position.y);
+                            new Vector2(_nextX - Mathf.Abs(_connectedY - _nextY), _connectedY);
                 }
                 else if (connectedNextAnglePreBend == 180 && connectedNextAnglePostBend == 225)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(mouseData.Position.x + Mathf.Abs(_nextY - mouseData.Position.y), _nextY);
+                            new Vector2(_connectedX + Mathf.Abs(_nextY - _connectedY), _nextY);
                 }
                 else if (connectedNextAnglePreBend == 225 && connectedNextAnglePostBend == 270)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(mouseData.Position.x, _nextY - Mathf.Abs(mouseData.Position.x - _nextX));
+                            new Vector2(_connectedX, _nextY - Mathf.Abs(_connectedX - _nextX));
                 }
                 else if (connectedNextAnglePreBend == 270 && connectedNextAnglePostBend == 315)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(_nextX, mouseData.Position.y + Mathf.Abs(_nextX - mouseData.Position.x));
+                            new Vector2(_nextX, _connectedY + Mathf.Abs(_nextX - _connectedX));
                 }
                 else if (connectedNextAnglePreBend == 315 && connectedNextAnglePostBend == 0)
                 {
                     bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
-                            new Vector2(_nextX + Mathf.Abs(mouseData.Position.y - _nextY), mouseData.Position.y);
+                            new Vector2(_nextX + Mathf.Abs(_connectedY - _nextY), _connectedY);
                 }
 
                 // Set the proper angle for calculations.
@@ -1501,6 +1981,241 @@ public class LineManager
         SetMouseBendDirection();
     }
 
+    /// <summary>
+    /// Creates the bending points for lines.
+    /// </summary>
+    private void SetMouseBends(float _mouseX, float _mouseY)
+    {
+        // STEP 1:
+        // Set bend position for the previous line if possible.
+        if (connectedPreviousPoint != null)
+        {
+            float _previousX =
+                (connectedPreviousPoint.AccessExitAngleIndex != -1)
+                ? connectedPreviousPoint.TiedStation.AccessConnections
+                    [connectedPreviousPoint.AccessExitAngleIndex,
+                     connectedPreviousPoint.AccessExitSlot].x
+                : connectedPreviousPoint.TiedStation.StationTruePosition.x;
+            float _previousY =
+                    (connectedPreviousPoint.AccessExitAngleIndex != -1)
+                    ? connectedPreviousPoint.TiedStation.AccessConnections
+                        [connectedPreviousPoint.AccessExitAngleIndex,
+                         connectedPreviousPoint.AccessExitSlot].y
+                    : connectedPreviousPoint.TiedStation.StationTruePosition.y;
+
+            if (bendRight)
+            {
+                if (connectedPreviousAnglePreBend == 0 && connectedPreviousAnglePostBend == 45)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX + Mathf.Abs(_mouseY - _previousY), _mouseY);
+                }
+                else if (connectedPreviousAnglePreBend == 45 && connectedPreviousAnglePostBend == 90)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX, _mouseY - Mathf.Abs(_previousX - _mouseX));
+                }
+                else if (connectedPreviousAnglePreBend == 90 && connectedPreviousAnglePostBend == 135)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX, _previousY + Mathf.Abs(_mouseX - _previousX));
+                }
+                else if (connectedPreviousAnglePreBend == 135 && connectedPreviousAnglePostBend == 180)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX + Mathf.Abs(_previousY - _mouseY), _previousY);
+                }
+                else if (connectedPreviousAnglePreBend == 180 && connectedPreviousAnglePostBend == 225)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX - Mathf.Abs(_mouseY - _previousY), _mouseY);
+                }
+                else if (connectedPreviousAnglePreBend == 225 && connectedPreviousAnglePostBend == 270)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX, _mouseY + Mathf.Abs(_previousX - _mouseX));
+                }
+                else if (connectedPreviousAnglePreBend == 270 && connectedPreviousAnglePostBend == 315)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX, _previousY - Mathf.Abs(_mouseX - _previousX));
+                }
+                else if (connectedPreviousAnglePreBend == 315 && connectedPreviousAnglePostBend == 0)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX - Mathf.Abs(_previousY - _mouseY), _previousY);
+                }
+
+                // Set the proper angle for calculations.
+                connectedPreviousAnglePreBendFixed = connectedPreviousAnglePostBend;
+                connectedPreviousAnglePostBendFixed = connectedPreviousAnglePreBend;
+            }
+            else
+            {
+                if (connectedPreviousAnglePreBend == 0 && connectedPreviousAnglePostBend == 45)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX - Mathf.Abs(_previousY - _mouseY), _previousY);
+                }
+                else if (connectedPreviousAnglePreBend == 45 && connectedPreviousAnglePostBend == 90)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX, _previousY + Mathf.Abs(_mouseX - _previousX));
+                }
+                else if (connectedPreviousAnglePreBend == 90 && connectedPreviousAnglePostBend == 135)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX, _mouseY - Mathf.Abs(_previousX - _mouseX));
+                }
+                else if (connectedPreviousAnglePreBend == 135 && connectedPreviousAnglePostBend == 180)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX - Mathf.Abs(_mouseY - _previousY), _mouseY);
+                }
+                else if (connectedPreviousAnglePreBend == 180 && connectedPreviousAnglePostBend == 225)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX + Mathf.Abs(_previousY - _mouseY), _previousY);
+                }
+                else if (connectedPreviousAnglePreBend == 225 && connectedPreviousAnglePostBend == 270)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_mouseX, _previousY - Mathf.Abs(_mouseX - _previousX));
+                }
+                else if (connectedPreviousAnglePreBend == 270 && connectedPreviousAnglePostBend == 315)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX, _mouseY + Mathf.Abs(_previousX - _mouseX));
+                }
+                else if (connectedPreviousAnglePreBend == 315 && connectedPreviousAnglePostBend == 0)
+                {
+                    bendPositions[connectedLineIndex][connectedPreviousPointIndex] = 
+                            new Vector2(_previousX + Mathf.Abs(_mouseY - _previousY), _mouseY);
+                }
+
+                // Set the proper angle for calculations.
+                connectedPreviousAnglePreBendFixed = connectedPreviousAnglePreBend;
+                connectedPreviousAnglePostBendFixed = connectedPreviousAnglePostBend;
+            }
+        }
+
+        // STEP 2:
+        // Set bend position for the next line if possible.
+        if (connectedNextPoint != null)
+        {
+            float _nextX =
+                (connectedNextPoint.AccessExitAngleIndex != -1)
+                ? connectedNextPoint.TiedStation.AccessConnections
+                    [connectedNextPoint.AccessExitAngleIndex,
+                     connectedNextPoint.AccessExitSlot].x
+                : connectedNextPoint.TiedStation.StationTruePosition.x;
+            float _nextY =
+                    (connectedNextPoint.AccessExitAngleIndex != -1)
+                    ? connectedNextPoint.TiedStation.AccessConnections
+                        [connectedNextPoint.AccessExitAngleIndex,
+                         connectedNextPoint.AccessExitSlot].y
+                    : connectedNextPoint.TiedStation.StationTruePosition.y;
+
+            if (bendRight)
+            {
+                if (connectedNextAnglePreBend == 0 && connectedNextAnglePostBend == 45)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX - Mathf.Abs(_nextY - _mouseY), _nextY);
+                }
+                else if (connectedNextAnglePreBend == 45 && connectedNextAnglePostBend == 90)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX, _nextY + Mathf.Abs(_mouseX - _nextX));
+                }
+                else if (connectedNextAnglePreBend == 90 && connectedNextAnglePostBend == 135)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX, _mouseY - Mathf.Abs(_nextX - _mouseX));
+                }
+                else if (connectedNextAnglePreBend == 135 && connectedNextAnglePostBend == 180)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX - Mathf.Abs(_mouseY - _nextY), _mouseY);
+                }
+                else if (connectedNextAnglePreBend == 180 && connectedNextAnglePostBend == 225)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX + Mathf.Abs(_nextY - _mouseY), _nextY);
+                }
+                else if (connectedNextAnglePreBend == 225 && connectedNextAnglePostBend == 270)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX, _nextY - Mathf.Abs(_mouseX - _nextX));
+                }
+                else if (connectedNextAnglePreBend == 270 && connectedNextAnglePostBend == 315)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX, _mouseY + Mathf.Abs(_nextX - _mouseX));
+                }
+                else if (connectedNextAnglePreBend == 315 && connectedNextAnglePostBend == 0)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX + Mathf.Abs(_mouseY - _nextY), _mouseY);
+                }
+
+                // Set the proper angle for calculations.
+                connectedNextAnglePreBendFixed = connectedNextAnglePostBend;
+                connectedNextAnglePostBendFixed = connectedNextAnglePreBend;
+            }
+            else
+            {
+                if (connectedNextAnglePreBend == 0 && connectedNextAnglePostBend == 45)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX + Mathf.Abs(_mouseY - _nextY), _mouseY);
+                }
+                else if (connectedNextAnglePreBend == 45 && connectedNextAnglePostBend == 90)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX, _mouseY - Mathf.Abs(_nextX - _mouseX));
+                }
+                else if (connectedNextAnglePreBend == 90 && connectedNextAnglePostBend == 135)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX, _nextY + Mathf.Abs(_mouseX - _nextX));
+                }
+                else if (connectedNextAnglePreBend == 135 && connectedNextAnglePostBend == 180)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX + Mathf.Abs(_nextY - _mouseY), _nextY);
+                }
+                else if (connectedNextAnglePreBend == 180 && connectedNextAnglePostBend == 225)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX - Mathf.Abs(_mouseY - _nextY), _mouseY);
+                }
+                else if (connectedNextAnglePreBend == 225 && connectedNextAnglePostBend == 270)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_nextX, _mouseY + Mathf.Abs(_nextX - _mouseX));
+                }
+                else if (connectedNextAnglePreBend == 270 && connectedNextAnglePostBend == 315)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX, _nextY - Mathf.Abs(_mouseX - _nextX));
+                }
+                else if (connectedNextAnglePreBend == 315 && connectedNextAnglePostBend == 0)
+                {
+                    bendPositions[connectedLineIndex][connectedNextPointIndex - 1] =
+                            new Vector2(_mouseX - Mathf.Abs(_nextY - _mouseY), _nextY);
+                }
+
+                // Set the proper angle for calculations.
+                connectedNextAnglePreBendFixed = connectedNextAnglePreBend;
+                connectedNextAnglePostBendFixed = connectedNextAnglePostBend;
+            }
+        }
+
+        // Set the direction for the line.
+        SetMouseBendDirection();
+    }
+
     private void SetMouseBendDirection ()
     {
         // STEP 5:
@@ -1545,233 +2260,78 @@ public class LineManager
         }
     }
 
-    /// <summary>
-    /// Used to cause whatever line is currently being held to be dropped.
-    /// </summary>
-    private void MouseDropLine(bool _looped)
+    private void SetFinalCollider (Point _connectedPoint)
     {
-        // STEP 1:
-        // Delete the currently held point
-        isLineHeld = false;
+        float _connectedX =
+                _connectedPoint.TiedStation.AccessConnections
+                    [_connectedPoint.AccessEntryAngleIndex,
+                     _connectedPoint.AccessEntrySlot].x;
+        float _connectedY =
+                _connectedPoint.TiedStation.AccessConnections
+                    [_connectedPoint.AccessEntryAngleIndex,
+                     _connectedPoint.AccessEntrySlot].y;
 
-
-        connectedPreviousPoint = null;
-        linePoints[connectedLineIndex].Remove(null);
-        bendPositions[connectedLineIndex].RemoveAt(connectedPreviousPointIndex);
-        if (linePoints[connectedLineIndex].Count == 1)
+        if (connectedPreviousPoint != null)
         {
-            // remove point here.
-            linePoints[connectedLineIndex].Clear();
-            bendPositions[connectedLineIndex].Clear();
-            colliders[connectedLineIndex].Clear();
-            currentNewLine--;
+            // STEP 1:
+            // Set values.
+            colliders[connectedLineIndex].Insert(connectedPreviousPointIndex, new AngledRectCollider[2]);
+
+            float _previousX =
+                (connectedPreviousPoint.AccessExitAngleIndex != -1)
+                ? connectedPreviousPoint.TiedStation.AccessConnections
+                    [connectedPreviousPoint.AccessExitAngleIndex,
+                     connectedPreviousPoint.AccessExitSlot].x
+                : connectedPreviousPoint.TiedStation.StationTruePosition.x;
+            float _previousY =
+                    (connectedPreviousPoint.AccessExitAngleIndex != -1)
+                    ? connectedPreviousPoint.TiedStation.AccessConnections
+                        [connectedPreviousPoint.AccessExitAngleIndex,
+                         connectedPreviousPoint.AccessExitSlot].y
+                    : connectedPreviousPoint.TiedStation.StationTruePosition.y;
+
+            // STEP 2:
+            // First half pre bend collider.
+            float _perpendicularAngle = connectedPreviousAnglePreBendFixed + 90.0f; 
+            Vector2 _pointOffset = new Vector2(
+                    (width / 2.0f) * Mathf.Cos(_perpendicularAngle * Mathf.Deg2Rad),
+                    (width / 2.0f) * Mathf.Sin(_perpendicularAngle * Mathf.Deg2Rad));
+
+            colliders[connectedLineIndex][connectedPreviousPointIndex][0] = new AngledRectCollider(
+                    new Vector2(
+                        _previousX + _pointOffset.x,
+                        _previousY + _pointOffset.y),
+                    new Vector2(
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].x + _pointOffset.x,
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].y + _pointOffset.y),
+                    new Vector2(
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].x - _pointOffset.x,
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].y - _pointOffset.y),
+                    new Vector2(
+                        _previousX - _pointOffset.x,
+                        _previousY - _pointOffset.y));
+
+            // STEP 3:
+            // Second half after the bend collider.
+            _perpendicularAngle = connectedPreviousAnglePostBendFixed + 90.0f;
+            _pointOffset = new Vector2(
+                    (width / 2.0f) * Mathf.Cos(_perpendicularAngle * Mathf.Deg2Rad),
+                    (width / 2.0f) * Mathf.Sin(_perpendicularAngle * Mathf.Deg2Rad));
+
+            colliders[connectedLineIndex][connectedPreviousPointIndex][1] = new AngledRectCollider(
+                    new Vector2(
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].x + _pointOffset.x,
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].y + _pointOffset.y),
+                    new Vector2(
+                        _connectedX + _pointOffset.x,
+                        _connectedY + _pointOffset.y),
+                    new Vector2(
+                        _connectedX - _pointOffset.x,
+                        _connectedY - _pointOffset.y),
+                    new Vector2(
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].x - _pointOffset.x,
+                        bendPositions[connectedLineIndex][connectedPreviousPointIndex].y - _pointOffset.y));
         }
-        else
-        {
-            linePoints[connectedLineIndex][connectedPreviousPointIndex].AccessExitAngleIndex = -1;
-            linePoints[connectedLineIndex][connectedPreviousPointIndex].AccessExitSlot = -1;
-        }
-    }
-
-    /// <summary>
-    /// Sets the position of a bend point for a line.
-    /// </summary>
-    /// <param name="_bendLine">The line which the desired points are within.</param>
-    /// <param name="_bendIndex">The index in bendPositions this bend is at.</param>
-    /// <param name="_startX">The starting x position that the bend will be placed after.</param>
-    /// <param name="_startY">The starting y position that the bend will be placed after.</param>
-    /// <param name="_endX">The ending x position that the bend will be placed after.</param>
-    /// <param name="_endY">The ending y position that the bend will be placed after.</param>
-    private void UpdateBend(int _lineIndex, int _bendPointIndex, float _startX, float _startY, float _endX, float _endY)
-    {
-        // STEP 1:
-        // Calculate the angles to start and end the bend with.
-        playerLineAngle =
-                Mathf.Floor(Mathf.Repeat(
-                    Mathf.Atan2(
-                        _endY - _startY,
-                        _endX - _startX) 
-                    * Mathf.Rad2Deg,
-                    360.0f));
-        fixedLineStartAngle = 
-                (int)Mathf.Repeat(
-                    Mathf.Floor(
-                        (playerLineAngle) / 45.0f)
-                    * 45.0f, 360);
-        if (fixedLineStartAngle == 0)
-        {
-            fixedLineEndAngle = (playerLineAngle > 270) ? 315 : 45;
-        }
-        else
-        {
-            if (playerLineAngle == fixedLineStartAngle)
-            {
-                fixedLineEndAngle =
-                        (bendRight)
-                        ? (int)Mathf.Repeat(fixedLineStartAngle - 45.0f, 360)
-                        : (int)Mathf.Repeat(fixedLineStartAngle + 45.0f, 360);
-            }
-            else
-            {
-                fixedLineEndAngle =
-                        (playerLineAngle < fixedLineStartAngle)
-                        ? (int)Mathf.Repeat(fixedLineStartAngle - 45.0f, 360)
-                        : (int)Mathf.Repeat(fixedLineStartAngle + 45.0f, 360);
-            }
-            
-        }
-
-        // STEP 2:
-        // Set bend position proprer, accounting for direction of the bend.
-        if (bendRight)
-        {
-            if (fixedLineStartAngle == 0 && fixedLineEndAngle == 45)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX + Mathf.Abs(_endY - _startY), _endY);
-            }
-            else if (fixedLineStartAngle == 45 && fixedLineEndAngle == 90)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX, _endY - Mathf.Abs(_startX - _endX));
-            }
-            else if (fixedLineStartAngle == 90 && fixedLineEndAngle == 135)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX, _startY + Mathf.Abs(_endX - _startX));
-            }
-            else if (fixedLineStartAngle == 135 && fixedLineEndAngle == 180)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX + Mathf.Abs(_startY - _endY), _startY);
-            }
-            else if (fixedLineStartAngle == 180 && fixedLineEndAngle == 225)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX - Mathf.Abs(_endY - _startY), _endY);
-            }
-            else if (fixedLineStartAngle == 225 && fixedLineEndAngle == 270)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX, _endY + Mathf.Abs(_startX - _endX));
-            }
-            else if (fixedLineStartAngle == 270 && fixedLineEndAngle == 315)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX, _startY - Mathf.Abs(_endX - _startX));
-            }
-            else if (fixedLineStartAngle == 315 && fixedLineEndAngle == 0)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX - Mathf.Abs(_startY - _endY), _startY);
-            }
-
-            // Set the proper angle for calculations.
-            lineStartAngle = fixedLineEndAngle;
-            lineEndAngle = fixedLineStartAngle;
-
-            if (Mathf.Floor(oldPlayerLineAngle / 45.0f) < Mathf.Floor(playerLineAngle / 45.0f) &&
-                !(Mathf.Floor(oldPlayerLineAngle / 45.0f) == 0 && Mathf.Floor(playerLineAngle / 45.0f) == 7))
-            {
-                bendRight = false;
-            }
-        }
-        else
-        {
-            if (fixedLineStartAngle == 0 && fixedLineEndAngle == 45)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX - Mathf.Abs(_startY - _endY), _startY);
-            }
-            else if (fixedLineStartAngle == 45 && fixedLineEndAngle == 90)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX, _startY + Mathf.Abs(_endX - _startX));
-            }
-            else if (fixedLineStartAngle == 90 && fixedLineEndAngle == 135)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX, _endY - Mathf.Abs(_startX - _endX));
-            }
-            else if (fixedLineStartAngle == 135 && fixedLineEndAngle == 180)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX - Mathf.Abs(_endY - _startY), _endY);
-            }
-            else if (fixedLineStartAngle == 180 && fixedLineEndAngle == 225)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX + Mathf.Abs(_startY - _endY), _startY);
-            }
-            else if (fixedLineStartAngle == 225 && fixedLineEndAngle == 270)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_endX, _startY - Mathf.Abs(_endX - _startX));
-            }
-            else if (fixedLineStartAngle == 270 && fixedLineEndAngle == 315)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX, _endY + Mathf.Abs(_startX - _endX));
-            }
-            else if (fixedLineStartAngle == 315 && fixedLineEndAngle == 0)
-            {
-                bendPositions[_lineIndex][_bendPointIndex] = new Vector2(_startX + Mathf.Abs(_endY - _startY), _endY);
-            }
-
-            // Set the proper angle for calculations.
-            lineStartAngle = fixedLineStartAngle;
-            lineEndAngle = fixedLineEndAngle;
-
-            if (Mathf.Floor(oldPlayerLineAngle / 45.0f) > Mathf.Floor(playerLineAngle / 45.0f) &&
-                !(Mathf.Floor(oldPlayerLineAngle / 45.0f) == 7 && Mathf.Floor(playerLineAngle / 45.0f) == 0))
-            {
-                bendRight = true;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a collider for the line to allow it to be clicked on.
-    /// </summary>
-    /// <param name="_lineIndex">The index of the line to work off of.</param>
-    /// <param name="_bendPointIndex">The index of the bend, since it is the same as the collider index.</param>
-    /// <param name="_startX">The starting x position of the line.</param>
-    /// <param name="_startY">The starting y position of the line.</param>
-    /// <param name="_endX">The end x position of the line.</param>
-    /// <param name="_endY">The end y position of the line.</param>
-    private void SetCollider(int _lineIndex, int _bendPointIndex, float _startX, float _startY, float _endX, float _endY)
-    {
-        // STEP 1:
-        // Set values.
-        colliders[_lineIndex][_bendPointIndex] = new AngledRectCollider[2];
-
-        // STEP 2:
-        // First half pre bend collider.
-        float _perpendicularAngle = lineStartAngle + 90.0f;
-        Vector2 _pointOffset = new Vector2(
-                (width / 2.0f) * Mathf.Cos(_perpendicularAngle * Mathf.Deg2Rad),
-                (width / 2.0f) * Mathf.Sin(_perpendicularAngle * Mathf.Deg2Rad));
-
-        colliders[_lineIndex][_bendPointIndex][0] = new AngledRectCollider(
-                new Vector2(
-                    _startX + _pointOffset.x,
-                    _startY + _pointOffset.y),
-                new Vector2(
-                    bendPositions[_lineIndex][_bendPointIndex].x + _pointOffset.x,
-                    bendPositions[_lineIndex][_bendPointIndex].y + _pointOffset.y),
-                new Vector2(
-                    bendPositions[_lineIndex][_bendPointIndex].x - _pointOffset.x,
-                    bendPositions[_lineIndex][_bendPointIndex].y - _pointOffset.y),
-                new Vector2(
-                    _startX - _pointOffset.x,
-                    _startY - _pointOffset.y));
-
-        // STEP 3:
-        // Second half after the bend collider.
-        _perpendicularAngle = lineEndAngle + 90.0f;
-        _pointOffset = new Vector2(
-                (width / 2.0f) * Mathf.Cos(_perpendicularAngle * Mathf.Deg2Rad),
-                (width / 2.0f) * Mathf.Sin(_perpendicularAngle * Mathf.Deg2Rad));
-
-        //colliders[_lineIndex][_bendPointIndex][1] = new AngledRectCollider(Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero);
-        colliders[_lineIndex][_bendPointIndex][1] = new AngledRectCollider(
-                new Vector2(
-                    bendPositions[_lineIndex][_bendPointIndex].x + _pointOffset.x,
-                    bendPositions[_lineIndex][_bendPointIndex].y + _pointOffset.y),
-                new Vector2(
-                    _endX + _pointOffset.x,
-                    _endY + _pointOffset.y),
-                new Vector2(
-                    _endX - _pointOffset.x,
-                    _endY - _pointOffset.y),
-                new Vector2(
-                    bendPositions[_lineIndex][_bendPointIndex].x - _pointOffset.x,
-                    bendPositions[_lineIndex][_bendPointIndex].y - _pointOffset.y));
     }
 
     /// <summary>
@@ -1809,7 +2369,14 @@ public class LineManager
                     }
                 }
 
-                if (_j < linePoints[_i].Count - 1) _allPointPositions.Add(bendPositions[_i][_j]);
+                if (_j < linePoints[_i].Count - 1)
+                {
+                    if (linePoints[_i][_j] == null || linePoints[_i][_j + 1] == null ||
+                        linePoints[_i][_j].AccessExitAngleIndex != linePoints[_i][_j + 1].AccessEntryAngleIndex)
+                    {
+                        _allPointPositions.Add(bendPositions[_i][_j]);
+                    }
+                }
             }
             lineRenderers[_i].positionCount = _allPointPositions.Count;
             lineRenderers[_i].startWidth = width;
@@ -2633,6 +3200,7 @@ public class Manager : MonoBehaviour
             {
                 for (int _j = 0; _j < lineManager.Colliders[_i].Count; ++_j)
                 {
+                    if (lineManager.Colliders[_i][_j] == null) continue;
                     Gizmos.DrawLine(lineManager.Colliders[_i][_j][0].PointA, lineManager.Colliders[_i][_j][0].PointB);
                     Gizmos.DrawLine(lineManager.Colliders[_i][_j][0].PointB, lineManager.Colliders[_i][_j][0].PointC);
                     Gizmos.DrawLine(lineManager.Colliders[_i][_j][0].PointC, lineManager.Colliders[_i][_j][0].PointD);
