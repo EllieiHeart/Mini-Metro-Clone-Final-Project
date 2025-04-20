@@ -2790,7 +2790,7 @@ MonoBehaviour:
   - {fileID: -1843197933104017171, guid: f548dd5ee0234ee4fb4ced42a8fce879, type: 3}
   - {fileID: 9164359298635338950, guid: c709e8d3ccfd21142aa8a65b74a4f5b1, type: 3}
   maxCameraTime: 60
-  startingStationTotal: 3
+  startingStationTotal: 5
   stationMaximumTotal: 10
   timeBetweenStationSpawns: 15
   passengerPrefab: {fileID: 2891408112630820766, guid: 565dc26403a954c43a0b153ad5a568f6, type: 3}
